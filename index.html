@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>觀相四柱 — AI 사주팔자</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700;900&family=Crimson+Pro:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --ink:#1a0a00;
+  --parchment:#f5e6c8;
+  --gold:#c4952a;
+  --gold-light:#e8c96a;
+  --cinnabar:#b5342e;
+  --jade:#2a6b4f;
+  --smoke:rgba(26,10,0,0.6);
+  --paper:#ede0c8;
+}
+html,body{height:100%;overflow-x:hidden}
+body{
+  font-family:'Noto Serif KR',serif;
+  background:var(--ink);
+  color:var(--parchment);
+}
+
+/* Texture overlay */
+body::before{
+  content:'';position:fixed;inset:0;
+  background:url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:9999;
+}
+
+/* Decorative border pattern */
+.border-pattern{
+  position:fixed;inset:0;pointer-events:none;z-index:100;
+  border:2px solid var(--gold);
+  margin:8px;
+  box-shadow:inset 0 0 30px rgba(196,149,42,0.1);
+}
+.border-pattern::before{
+  content:'';position:absolute;inset:6px;
+  border:1px solid rgba(196,149,42,0.3);
+}
+
+/* Main container */
+.container{
+  max-width:680px;margin:0 auto;
+  padding:40px 24px 60px;
+  min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+}
+
+/* Header */
+.header{text-align:center;margin-bottom:40px;position:relative}
+.header h1{
+  font-size:2.8rem;font-weight:900;
+  color:var(--gold);
+  letter-spacing:0.15em;
+  text-shadow:0 0 40px rgba(196,149,42,0.3);
+  margin-bottom:8px;
+}
+.header .subtitle{
+  font-family:'Crimson Pro',serif;
+  font-style:italic;font-size:1rem;
+  color:rgba(245,230,200,0.5);
+  letter-spacing:0.3em;
+}
+.header .hanja{
+  font-size:3.6rem;
+  color:rgba(196,149,42,0.15);
+  position:absolute;top:-20px;left:50%;transform:translateX(-50%);
+  letter-spacing:0.5em;white-space:nowrap;
+  z-index:-1;
+}
+
+/* Divider */
+.divider{
+  width:200px;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+  margin:20px auto;
+}
+
+/* Instructions */
+.instructions{
+  text-align:center;
+  color:rgba(245,230,200,0.6);
+  font-size:0.9rem;
+  line-height:1.8;
+  margin-bottom:30px;
+}
+
+/* Face capture area */
+.capture-area{
+  width:100%;max-width:480px;
+  aspect-ratio:4/3;
+  position:relative;
+  border:1px solid rgba(196,149,42,0.3);
+  border-radius:4px;
+  overflow:hidden;
+  background:rgba(26,10,0,0.8);
+  margin-bottom:24px;
+}
+.capture-area video,
+.capture-area canvas,
+.capture-area img{
+  width:100%;height:100%;
+  object-fit:cover;
+  display:block;
+}
+.capture-area video{transform:scaleX(-1)}
+#previewCanvas{display:none}
+#uploadedImage{display:none;object-fit:contain;background:#0a0500}
+
+/* Corner decorations on capture area */
+.capture-area::before,
+.capture-area::after{
+  content:'';position:absolute;
+  width:40px;height:40px;
+  border-color:var(--gold);border-style:solid;
+  z-index:10;
+}
+.capture-area::before{top:12px;left:12px;border-width:2px 0 0 2px}
+.capture-area::after{top:12px;right:12px;border-width:2px 2px 0 0}
+.corner-bl,.corner-br{
+  position:absolute;width:40px;height:40px;
+  border-color:var(--gold);border-style:solid;z-index:10;
+}
+.corner-bl{bottom:12px;left:12px;border-width:0 0 2px 2px}
+.corner-br{bottom:12px;right:12px;border-width:0 2px 2px 0}
+
+.placeholder-text{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  color:rgba(196,149,42,0.4);
+  font-size:0.9rem;
+  gap:12px;
+}
+.placeholder-text .icon{font-size:3rem;opacity:0.5}
+
+/* Buttons */
+.btn-row{
+  display:flex;gap:12px;
+  width:100%;max-width:480px;
+  margin-bottom:16px;
+}
+.btn{
+  flex:1;
+  padding:14px 20px;
+  font-family:'Noto Serif KR',serif;
+  font-size:0.95rem;
+  border:1px solid var(--gold);
+  background:transparent;
+  color:var(--gold);
+  cursor:pointer;
+  transition:all 0.3s;
+  letter-spacing:0.1em;
+  position:relative;
+  overflow:hidden;
+}
+.btn:hover{
+  background:rgba(196,149,42,0.1);
+  box-shadow:0 0 20px rgba(196,149,42,0.15);
+}
+.btn:active{transform:scale(0.98)}
+.btn.primary{
+  background:linear-gradient(135deg,var(--gold),#a07820);
+  color:var(--ink);
+  font-weight:700;
+  border:none;
+}
+.btn.primary:hover{
+  box-shadow:0 0 30px rgba(196,149,42,0.4);
+}
+.btn:disabled{opacity:0.3;cursor:not-allowed}
+
+.btn-small{
+  padding:10px 16px;font-size:0.85rem;
+  border:1px solid rgba(196,149,42,0.4);
+  background:transparent;color:var(--gold);
+  font-family:'Noto Serif KR',serif;
+  cursor:pointer;transition:all 0.3s;
+  letter-spacing:0.05em;
+}
+.btn-small:hover{background:rgba(196,149,42,0.1)}
+
+#fileInput{display:none}
+
+/* Loading */
+.loading-overlay{
+  display:none;
+  position:fixed;inset:0;
+  background:rgba(10,5,0,0.92);
+  z-index:1000;
+  flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:30px;
+}
+.loading-overlay.active{display:flex}
+
+.trigram-spinner{
+  width:100px;height:100px;
+  position:relative;
+  animation:spinSlow 8s linear infinite;
+}
+@keyframes spinSlow{to{transform:rotate(360deg)}}
+.trigram-spinner::before{
+  content:'☰';
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:4rem;
+  color:var(--gold);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:0.4;transform:scale(1)}50%{opacity:1;transform:scale(1.1)}}
+
+.loading-text{
+  color:var(--gold-light);
+  font-size:1rem;
+  letter-spacing:0.2em;
+  animation:fadeInOut 2s ease-in-out infinite;
+}
+@keyframes fadeInOut{0%,100%{opacity:0.3}50%{opacity:1}}
+
+/* Results */
+.result-section{
+  display:none;
+  width:100%;max-width:580px;
+  margin-top:20px;
+}
+.result-section.active{display:block}
+
+.result-card{
+  background:linear-gradient(160deg,rgba(50,30,10,0.9),rgba(30,15,5,0.95));
+  border:1px solid rgba(196,149,42,0.25);
+  padding:36px 28px;
+  margin-bottom:20px;
+  position:relative;
+  animation:fadeUp 0.8s ease-out;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.result-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;
+  height:3px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+}
+
+.result-card h2{
+  color:var(--gold);
+  font-size:1.3rem;
+  margin-bottom:16px;
+  letter-spacing:0.15em;
+  display:flex;align-items:center;gap:10px;
+}
+.result-card h2 .icon{font-size:1.5rem}
+
+.result-card .content{
+  color:rgba(245,230,200,0.85);
+  font-size:0.95rem;
+  line-height:2;
+  white-space:pre-wrap;
+}
+
+.pillar-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+  margin:20px 0;
+}
+.pillar{
+  text-align:center;
+  padding:16px 8px;
+  border:1px solid rgba(196,149,42,0.2);
+  background:rgba(26,10,0,0.5);
+}
+.pillar .label{
+  font-size:0.75rem;
+  color:rgba(196,149,42,0.6);
+  margin-bottom:8px;
+  letter-spacing:0.1em;
+}
+.pillar .hanja-char{
+  font-size:1.8rem;
+  color:var(--gold);
+  margin-bottom:4px;
+}
+.pillar .hangul{
+  font-size:0.8rem;
+  color:rgba(245,230,200,0.6);
+}
+
+.element-badge{
+  display:inline-block;
+  padding:3px 10px;
+  border:1px solid;
+  font-size:0.8rem;
+  margin:2px;
+  border-radius:2px;
+}
+.element-badge.wood{color:#4a9;border-color:#4a9}
+.element-badge.fire{color:#e54;border-color:#e54}
+.element-badge.earth{color:#c90;border-color:#c90}
+.element-badge.metal{color:#aab;border-color:#aab}
+.element-badge.water{color:#48c;border-color:#48c}
+
+.disclaimer{
+  text-align:center;
+  font-size:0.75rem;
+  color:rgba(245,230,200,0.3);
+  margin-top:30px;
+  line-height:1.8;
+  font-style:italic;
+}
+
+/* Scroll reveal */
+.reveal{opacity:0;transform:translateY(15px);transition:all 0.6s ease-out}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* Responsive */
+@media(max-width:500px){
+  .header h1{font-size:2rem}
+  .header .hanja{font-size:2.4rem}
+  .pillar-grid{grid-template-columns:repeat(2,1fr)}
+  .container{padding:30px 16px 40px}
+  .result-card{padding:24px 18px}
+}
+</style>
+</head>
+<body>
+
+<div class="border-pattern"></div>
+
+<div class="container">
+  <header class="header">
+    <div class="hanja">觀相四柱</div>
+    <h1>觀相四柱</h1>
+    <div class="subtitle">AI Face Reading & Four Pillars of Destiny</div>
+  </header>
+
+  <div class="divider"></div>
+
+  <p class="instructions">
+    카메라로 얼굴을 비추거나 사진을 올려주세요.<br>
+    AI가 관상과 사주팔자를 풀이해 드립니다.
+  </p>
+
+  <div class="capture-area" id="captureArea">
+    <video id="cameraFeed" autoplay playsinline></video>
+    <canvas id="previewCanvas"></canvas>
+    <img id="uploadedImage" alt="uploaded face">
+    <div class="placeholder-text" id="placeholder">
+      <div class="icon">面</div>
+      <span>카메라를 켜거나 사진을 올려주세요</span>
+    </div>
+    <div class="corner-bl"></div>
+    <div class="corner-br"></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" id="btnCamera" onclick="toggleCamera()">📷 카메라</button>
+    <button class="btn" id="btnUpload" onclick="document.getElementById('fileInput').click()">🖼️ 사진 올리기</button>
+    <input type="file" id="fileInput" accept="image/*" onchange="handleUpload(event)">
+  </div>
+
+  <div class="btn-row">
+    <button class="btn primary" id="btnAnalyze" onclick="analyze()" disabled>
+      ✦ 사주팔자 보기 ✦
+    </button>
+  </div>
+
+  <div class="result-section" id="resultSection"></div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="trigram-spinner"></div>
+  <div class="loading-text" id="loadingText">관상을 살피고 있습니다...</div>
+</div>
+
+<script>
+let cameraStream = null;
+let cameraActive = false;
+let currentImageData = null;
+const loadingMessages = [
+  '관상을 살피고 있습니다...',
+  '사주의 기운을 읽고 있습니다...',
+  '오행의 조화를 분석합니다...',
+  '천간과 지지를 배열합니다...',
+  '운명의 흐름을 짚어봅니다...',
+];
+
+async function toggleCamera() {
+  const video = document.getElementById('cameraFeed');
+  const placeholder = document.getElementById('placeholder');
+  const uploadedImg = document.getElementById('uploadedImage');
+  const btnCam = document.getElementById('btnCamera');
+
+  if (cameraActive) {
+    stopCamera();
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+    });
+    cameraStream = stream;
+    video.srcObject = stream;
+    video.style.display = 'block';
+    uploadedImg.style.display = 'none';
+    placeholder.style.display = 'none';
+    cameraActive = true;
+    btnCam.textContent = '⏹ 카메라 끄기';
+    document.getElementById('btnAnalyze').disabled = false;
+    currentImageData = null;
+  } catch (e) {
+    alert('카메라 접근 권한이 필요합니다.');
+  }
+}
+
+function stopCamera() {
+  const video = document.getElementById('cameraFeed');
+  const btnCam = document.getElementById('btnCamera');
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  video.srcObject = null;
+  video.style.display = 'none';
+  cameraActive = false;
+  btnCam.textContent = '📷 카메라';
+  if (!currentImageData) {
+    document.getElementById('placeholder').style.display = 'flex';
+    document.getElementById('btnAnalyze').disabled = true;
+  }
+}
+
+function handleUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  stopCamera();
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = document.getElementById('uploadedImage');
+    img.src = e.target.result;
+    img.style.display = 'block';
+    document.getElementById('placeholder').style.display = 'none';
+    document.getElementById('cameraFeed').style.display = 'none';
+
+    // Extract base64
+    currentImageData = e.target.result.split(',')[1];
+    document.getElementById('btnAnalyze').disabled = false;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function captureFrame() {
+  if (currentImageData) return currentImageData;
+  if (!cameraActive) return null;
+
+  const video = document.getElementById('cameraFeed');
+  const canvas = document.getElementById('previewCanvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+}
+
+async function analyze() {
+  const imageBase64 = captureFrame();
+  if (!imageBase64) {
+    alert('먼저 카메라를 켜거나 사진을 올려주세요.');
+    return;
+  }
+
+  // Show loading
+  const overlay = document.getElementById('loadingOverlay');
+  const loadingText = document.getElementById('loadingText');
+  overlay.classList.add('active');
+
+  let msgIdx = 0;
+  const msgInterval = setInterval(() => {
+    msgIdx = (msgIdx + 1) % loadingMessages.length;
+    loadingText.textContent = loadingMessages[msgIdx];
+  }, 2500);
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 }
+            },
+            {
+              type: 'text',
+              text: `당신은 한국 전통 관상학과 사주팔자(四柱八字)에 능통한 AI 역술가입니다.
+이 사람의 얼굴 사진을 보고, 재미있고 흥미로운 사주팔자 풀이를 해주세요.
+
+반드시 아래 JSON 형식으로만 응답하세요. JSON 외 다른 텍스트는 절대 포함하지 마세요.
+
+{
+  "face_reading": "관상 분석 (이마, 눈, 코, 입, 턱 등의 생김새에서 읽히는 기운과 성격을 2~3문단으로 서술)",
+  "estimated_birth_season": "얼굴 인상에서 추정하는 태어난 계절과 이유",
+  "pillars": {
+    "year": { "hanja": "甲子", "hangul": "갑자", "element": "wood" },
+    "month": { "hanja": "丙寅", "hangul": "병인", "element": "fire" },
+    "day": { "hanja": "戊辰", "hangul": "무진", "element": "earth" },
+    "hour": { "hanja": "庚午", "hangul": "경오", "element": "metal" }
+  },
+  "five_elements_analysis": "오행(목화토금수) 분석 - 어떤 기운이 강하고 부족한지 (1~2문단)",
+  "personality": "성격 및 기질 분석 (2문단)",
+  "career_fortune": "직업운과 재물운 (1~2문단)",
+  "love_fortune": "연애운과 인연 (1~2문단)",
+  "health_fortune": "건강운 (1문단)",
+  "lucky_info": {
+    "color": "행운의 색",
+    "number": "행운의 숫자",
+    "direction": "행운의 방위"
+  },
+  "overall_fortune": "종합운세 및 조언 (2~3문단, 긍정적이고 격려하는 톤으로)"
+}
+
+참고:
+- 사주의 천간/지지 조합은 관상에서 느껴지는 인상을 바탕으로 창의적으로 배정하세요
+- element는 반드시 wood, fire, earth, metal, water 중 하나
+- 재미있고 구체적으로 작성하되, 너무 부정적인 내용은 피하세요
+- 한국어로 작성하세요`
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error.message || 'API 오류');
+    }
+
+    const text = data.content.map(b => b.text || '').join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+
+    renderResult(result);
+
+  } catch (err) {
+    console.error(err);
+    alert('분석 중 오류가 발생했습니다: ' + err.message);
+  } finally {
+    clearInterval(msgInterval);
+    overlay.classList.remove('active');
+  }
+}
+
+function renderResult(r) {
+  const section = document.getElementById('resultSection');
+
+  const elementNames = {
+    wood: '목(木)', fire: '화(火)', earth: '토(土)', metal: '금(金)', water: '수(水)'
+  };
+
+  const pillarsHTML = `
+    <div class="pillar-grid">
+      ${['year','month','day','hour'].map((key, i) => {
+        const p = r.pillars[key];
+        const labels = ['년주(年柱)','월주(月柱)','일주(日柱)','시주(時柱)'];
+        return `<div class="pillar">
+          <div class="label">${labels[i]}</div>
+          <div class="hanja-char">${p.hanja}</div>
+          <div class="hangul">${p.hangul}</div>
+          <div style="margin-top:6px"><span class="element-badge ${p.element}">${elementNames[p.element]}</span></div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  section.innerHTML = `
+    <div class="result-card reveal">
+      <h2><span class="icon">面</span> 관상 풀이</h2>
+      <div class="content">${r.face_reading}</div>
+      <div style="margin-top:12px;padding:12px;background:rgba(196,149,42,0.08);border-left:2px solid var(--gold);font-size:0.88rem;color:rgba(245,230,200,0.7)">
+        🌿 추정 태어난 계절: ${r.estimated_birth_season}
+      </div>
+    </div>
+
+    <div class="result-card reveal">
+      <h2><span class="icon">柱</span> 사주팔자 (四柱八字)</h2>
+      ${pillarsHTML}
+    </div>
+
+    <div class="result-card reveal">
+      <h2><span class="icon">行</span> 오행 분석</h2>
+      <div class="content">${r.five_elements_analysis}</div>
+    </div>
+
+    <div class="result-card reveal">
+      <h2><span class="icon">性</span> 성격과 기질</h2>
+      <div class="content">${r.personality}</div>
+    </div>
+
+    <div class="result-card reveal">
+      <h2><span class="icon">財</span> 직업운 · 재물운</h2>
+      <div class="content">${r.career_fortune}</div>
+    </div>
+
+    <div class="result-card reveal">
+      <h2><span class="icon">緣</span> 연애운 · 인연</h2>
+      <div class="content">${r.love_fortune}</div>
+    </div>
+
+    <div class="result-card reveal">
+      <h2><span class="icon">壽</span> 건강운</h2>
+      <div class="content">${r.health_fortune}</div>
+    </div>
+
+    <div class="result-card reveal">
+      <h2><span class="icon">吉</span> 행운 정보</h2>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
+        <div style="flex:1;min-width:120px;text-align:center;padding:16px;border:1px solid rgba(196,149,42,0.2)">
+          <div style="font-size:0.75rem;color:rgba(196,149,42,0.6);margin-bottom:6px">행운의 색</div>
+          <div style="font-size:1.1rem;color:var(--gold)">${r.lucky_info.color}</div>
+        </div>
+        <div style="flex:1;min-width:120px;text-align:center;padding:16px;border:1px solid rgba(196,149,42,0.2)">
+          <div style="font-size:0.75rem;color:rgba(196,149,42,0.6);margin-bottom:6px">행운의 숫자</div>
+          <div style="font-size:1.1rem;color:var(--gold)">${r.lucky_info.number}</div>
+        </div>
+        <div style="flex:1;min-width:120px;text-align:center;padding:16px;border:1px solid rgba(196,149,42,0.2)">
+          <div style="font-size:0.75rem;color:rgba(196,149,42,0.6);margin-bottom:6px">행운의 방위</div>
+          <div style="font-size:1.1rem;color:var(--gold)">${r.lucky_info.direction}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="result-card reveal">
+      <h2><span class="icon">運</span> 종합운세</h2>
+      <div class="content">${r.overall_fortune}</div>
+    </div>
+
+    <p class="disclaimer">
+      ※ 본 결과는 AI가 재미를 위해 생성한 것이며, 실제 역학·관상학적 근거와 무관합니다.<br>
+      오락 목적으로만 참고해 주세요.
+    </p>
+
+    <div style="text-align:center;margin-top:20px">
+      <button class="btn-small" onclick="resetAll()">↻ 다시 보기</button>
+    </div>
+  `;
+
+  section.classList.add('active');
+
+  // Stagger reveal animations
+  const cards = section.querySelectorAll('.reveal');
+  cards.forEach((card, i) => {
+    setTimeout(() => card.classList.add('visible'), 200 + i * 200);
+  });
+
+  // Scroll to results
+  setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+}
+
+function resetAll() {
+  document.getElementById('resultSection').classList.remove('active');
+  document.getElementById('resultSection').innerHTML = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
